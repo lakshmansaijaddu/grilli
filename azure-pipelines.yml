@@ -11,7 +11,7 @@ variables:
   acrName: 'lakshmanacr-fyeta6hma6ducah6'               # ACR name (without .azurecr.io)
   imageName: 'grilli'
   tag: '$(Build.BuildId)'
-  appName: 'grilli'                     # Azure Web App name
+  appName: 'griilicontainer'                     # Azure Web App name
 
 steps:
 
