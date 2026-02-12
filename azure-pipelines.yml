@@ -4,39 +4,37 @@ trigger:
       - master
 
 pool:
-  name: 'selfhosted'
+  name: selfhosted
 
 variables:
-  azureSubscription: 'arm service'  # replace with your service connection name
-  appName: 'grilli'                  # replace with your App Service name
+  azureSubscription: 'arm service'
+  acrName: 'lakshmanacr'
+  imageName: 'grilli'
+  tag: '$(Build.BuildId)'
+  appName: 'grilli'
 
 steps:
-# 1) Checkout the code
+
 - checkout: self
 
-# 2) Archive entire static site
-- task: ArchiveFiles@2
-  inputs:
-    rootFolderOrFile: '$(Build.SourcesDirectory)'
-    includeRootFolder: false
-    archiveType: 'zip'
-    archiveFile: '$(Build.ArtifactStagingDirectory)/site.zip'
-    replaceExistingArchive: true
-  displayName: 'Package static site'
-
-# 3) Publish the artifact (optional)
-- task: PublishBuildArtifacts@1
-  inputs:
-    PathtoPublish: '$(Build.ArtifactStagingDirectory)/site.zip'
-    ArtifactName: 'static-site'
-    publishLocation: 'Container'
-  displayName: 'Publish Artifact'
-
-# 4) Deploy to Azure App Service
-- task: AzureWebApp@1
+# 🔹 Login to Azure and ACR
+- task: AzureCLI@2
+  displayName: 'Build and Push Image using Azure CLI'
   inputs:
     azureSubscription: '$(azureSubscription)'
-    appType: 'webApp'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      az acr login --name $(acrName)
+
+      docker build -t $(acrName).azurecr.io/$(imageName):$(tag) .
+
+      docker push $(acrName).azurecr.io/$(imageName):$(tag)
+
+# 🔹 Deploy Container to App Service
+- task: AzureWebAppContainer@1
+  displayName: 'Deploy to Web App'
+  inputs:
+    azureSubscription: '$(azureSubscription)'
     appName: '$(appName)'
-    package: '$(Build.ArtifactStagingDirectory)/site.zip'
-  displayName: 'Deploy to Azure App Service'
+    containers: '$(acrName).azurecr.io/$(imageName):$(tag)'
