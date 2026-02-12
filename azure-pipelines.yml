@@ -8,7 +8,7 @@ pool:
 
 variables:
   azureSubscription: 'arm service'      # Azure RM service connection name
-  acrName: 'lakshmanaacr'               # ACR name (without .azurecr.io)
+  acrName: 'lakshmanacr-fyeta6hma6ducah6'               # ACR name (without .azurecr.io)
   imageName: 'grilli'
   tag: '$(Build.BuildId)'
   appName: 'grilli'                     # Azure Web App name
