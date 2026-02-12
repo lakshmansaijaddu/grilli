@@ -1,0 +1,42 @@
+trigger:
+  branches:
+    include:
+      - master
+
+pool:
+  name: 'selfhosted'
+
+variables:
+  azureSubscription: 'ARM Service Connect'  # replace with your service connection name
+  appName: 'grilli'                  # replace with your App Service name
+
+steps:
+# 1) Checkout the code
+- checkout: self
+
+# 2) Archive entire static site
+- task: ArchiveFiles@2
+  inputs:
+    rootFolderOrFile: '$(Build.SourcesDirectory)'
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/site.zip'
+    replaceExistingArchive: true
+  displayName: 'Package static site'
+
+# 3) Publish the artifact (optional)
+- task: PublishBuildArtifacts@1
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)/site.zip'
+    ArtifactName: 'static-site'
+    publishLocation: 'Container'
+  displayName: 'Publish Artifact'
+
+# 4) Deploy to Azure App Service
+- task: AzureWebApp@1
+  inputs:
+    azureSubscription: '$(azureSubscription)'
+    appType: 'webApp'
+    appName: '$(appName)'
+    package: '$(Build.ArtifactStagingDirectory)/site.zip'
+  displayName: 'Deploy to Azure App Service'
