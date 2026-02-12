@@ -22,7 +22,7 @@ steps:
   displayName: 'Build and Push Image using Azure CLI'
   inputs:
     azureSubscription: '$(azureSubscription)'
-    scriptType: 'bash'
+    scriptType: 'ps'
     scriptLocation: 'inlineScript'
     inlineScript: |
       az acr login --name $(acrName)
