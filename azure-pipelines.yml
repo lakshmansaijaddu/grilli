@@ -4,36 +4,40 @@ trigger:
       - master
 
 pool:
-  name: selfhosted
+  name: 'selfhosted'   # Your Windows self-hosted agent
 
 variables:
-  azureSubscription: 'arm service'
-  acrName: 'lakshmanacr'
+  azureSubscription: 'arm service'      # Azure RM service connection name
+  acrName: 'lakshmanaacr'               # ACR name (without .azurecr.io)
   imageName: 'grilli'
   tag: '$(Build.BuildId)'
-  appName: 'grilli'
+  appName: 'grilli'                     # Azure Web App name
 
 steps:
 
+# 1️⃣ Checkout source code
 - checkout: self
 
-# 🔹 Login to Azure and ACR
+# 2️⃣ Build and Push Docker Image
 - task: AzureCLI@2
-  displayName: 'Build and Push Image using Azure CLI'
+  displayName: 'Build and Push Docker Image'
   inputs:
     azureSubscription: '$(azureSubscription)'
-    scriptType: 'ps'
+    scriptType: 'ps'   # Windows agent → use PowerShell
     scriptLocation: 'inlineScript'
     inlineScript: |
+      Write-Host "Logging into Azure Container Registry..."
       az acr login --name $(acrName)
 
+      Write-Host "Building Docker image..."
       docker build -t $(acrName).azurecr.io/$(imageName):$(tag) .
 
+      Write-Host "Pushing Docker image to ACR..."
       docker push $(acrName).azurecr.io/$(imageName):$(tag)
 
-# 🔹 Deploy Container to App Service
+# 3️⃣ Deploy Container to Azure Web App
 - task: AzureWebAppContainer@1
-  displayName: 'Deploy to Web App'
+  displayName: 'Deploy to Azure Web App'
   inputs:
     azureSubscription: '$(azureSubscription)'
     appName: '$(appName)'
