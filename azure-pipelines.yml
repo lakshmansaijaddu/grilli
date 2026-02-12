@@ -4,7 +4,7 @@ trigger:
       - master
 
 pool:
-  name: default
+  name: 'selfhosted'
 
 variables:
   azureSubscription: 'arm service'  # replace with your service connection name
