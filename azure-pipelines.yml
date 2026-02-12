@@ -7,7 +7,7 @@ pool:
   name: 'selfhosted'
 
 variables:
-  azureSubscription: 'ARM Service Connect'  # replace with your service connection name
+  azureSubscription: 'arm service'  # replace with your service connection name
   appName: 'grilli'                  # replace with your App Service name
 
 steps:
