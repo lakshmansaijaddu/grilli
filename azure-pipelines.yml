@@ -11,7 +11,7 @@ variables:
 
   # ACR
   acrName: 'lakshmanacr'
-  acrLoginServer: 'lakshmanacr.azurecr.io'
+  acrLoginServer: 'lakshmanacr-fyeta6hma6ducah6.azurecr.io'
   imageRepository: 'grilli'
   imageTag: '$(Build.BuildId)'
 
