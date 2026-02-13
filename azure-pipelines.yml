@@ -10,7 +10,7 @@ variables:
   azureSubscription: 'arm service'
 
   # ACR
-  acrName: 'lakshmanacr-fyeta6hma6ducah6'
+  acrName: 'lakshmanacr'
   acrLoginServer: 'lakshmanacr-fyeta6hma6ducah6.azurecr.io'
   imageRepository: 'grilli'
   imageTag: '$(Build.BuildId)'
