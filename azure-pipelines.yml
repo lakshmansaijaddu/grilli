@@ -4,18 +4,26 @@ trigger:
       - master
 
 pool:
-  name: 'selfhosted'   # Your Windows self-hosted agent
+  name: 'selfhosted'   # Your Windows agent pool name
 
 variables:
-  azureSubscription: 'arm service'      # Azure RM service connection name
-  acrName: 'lakshmanacr-fyeta6hma6ducah6'               # ACR name (without .azurecr.io)
-  imageName: 'grilli'
-  tag: '$(Build.BuildId)'
-  appName: 'griilicontainer'                     # Azure Web App name
+  azureSubscription: 'arm service'
+
+  # ACR
+  acrName: 'lakshmanacr-fyeta6hma6ducah6'
+  acrLoginServer: 'lakshmanacr-fyeta6hma6ducah6.azurecr.io'
+  imageRepository: 'grilli'
+  imageTag: '$(Build.BuildId)'
+
+  # Azure Resources
+  resourceGroup: 'DevOps'
+  containerAppName: 'grilli'
+  containerAppEnv: 'managedEnvironment-DevOps-b5f4'
+  location: 'southindia'
 
 steps:
 
-# 1️⃣ Checkout source code
+# 1️⃣ Checkout code
 - checkout: self
 
 # 2️⃣ Build and Push Docker Image
@@ -23,22 +31,63 @@ steps:
   displayName: 'Build and Push Docker Image'
   inputs:
     azureSubscription: '$(azureSubscription)'
-    scriptType: 'ps'   # Windows agent → use PowerShell
+    scriptType: 'ps'
     scriptLocation: 'inlineScript'
     inlineScript: |
-      Write-Host "Logging into Azure Container Registry..."
+      Write-Host "Logging into ACR..."
       az acr login --name $(acrName)
 
       Write-Host "Building Docker image..."
-      docker build -t $(acrName).azurecr.io/$(imageName):$(tag) .
+      docker build -t $(acrLoginServer)/$(imageRepository):$(imageTag) .
 
-      Write-Host "Pushing Docker image to ACR..."
-      docker push $(acrName).azurecr.io/$(imageName):$(tag)
+      Write-Host "Pushing Docker image..."
+      docker push $(acrLoginServer)/$(imageRepository):$(imageTag)
 
-# 3️⃣ Deploy Container to Azure Web App
-- task: AzureWebAppContainer@1
-  displayName: 'Deploy to Azure Web App'
+# 3️⃣ Create or Update Container App
+- task: AzureCLI@2
+  displayName: 'Deploy to Azure Container Apps'
   inputs:
     azureSubscription: '$(azureSubscription)'
-    appName: '$(appName)'
-    containers: '$(acrName).azurecr.io/$(imageName):$(tag)'
+    scriptType: 'ps'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+
+      $appExists = az containerapp show `
+        --name $(containerAppName) `
+        --resource-group $(resourceGroup) `
+        --query name `
+        --output tsv 2>$null
+
+      if (-not $appExists) {
+
+          Write-Host "Creating Container App..."
+
+          az containerapp create `
+            --name $(containerAppName) `
+            --resource-group $(resourceGroup) `
+            --environment $(containerAppEnv) `
+            --image $(acrLoginServer)/$(imageRepository):$(imageTag) `
+            --registry-server $(acrLoginServer) `
+            --target-port 80 `
+            --ingress external `
+            --cpu 0.5 `
+            --memory 1.0Gi `
+            --min-replicas 1 `
+            --max-replicas 2
+
+      } else {
+
+          Write-Host "Updating Container App..."
+
+          az containerapp update `
+            --name $(containerAppName) `
+            --resource-group $(resourceGroup) `
+            --image $(acrLoginServer)/$(imageRepository):$(imageTag)
+      }
+
+      Write-Host "Fetching Application URL..."
+
+      az containerapp show `
+        --name $(containerAppName) `
+        --resource-group $(resourceGroup) `
+        --query properties.configuration.ingress.fqdn
