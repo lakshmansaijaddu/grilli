@@ -4,14 +4,14 @@ trigger:
       - master
 
 pool:
-  name: 'selfhosted'   # Your Windows agent pool name
+  name: 'selfhosted'   # Your Windows agent pool
 
 variables:
   azureSubscription: 'arm service'
 
   # ACR
   acrName: 'lakshmanacr'
-  acrLoginServer: 'lakshmanacr-fyeta6hma6ducah6.azurecr.io'
+  acrLoginServer: 'lakshmanacr.azurecr.io'
   imageRepository: 'grilli'
   imageTag: '$(Build.BuildId)'
 
@@ -19,75 +19,98 @@ variables:
   resourceGroup: 'DevOps'
   containerAppName: 'grilli'
   containerAppEnv: 'managedEnvironment-DevOps-b5f4'
-  location: 'southindia'
+  appServiceName: 'griilicontainer'
 
-steps:
+############################################################
+# STAGE 1 - BUILD
+############################################################
+stages:
+- stage: Build
+  displayName: "Build Docker Image"
+  jobs:
+  - job: BuildImage
+    steps:
+    - checkout: self
 
-# 1️⃣ Checkout code
-- checkout: self
+    - powershell: |
+        Write-Host "Building Docker image..."
+        docker build -t $(imageRepository):$(imageTag) .
+      displayName: "Docker Build"
 
-# 2️⃣ Build and Push Docker Image
-- task: AzureCLI@2
-  displayName: 'Build and Push Docker Image'
-  inputs:
-    azureSubscription: '$(azureSubscription)'
-    scriptType: 'ps'
-    scriptLocation: 'inlineScript'
-    inlineScript: |
-      Write-Host "Logging into ACR..."
-      az acr login --name $(acrName)
+############################################################
+# STAGE 2 - PUSH TO ACR
+############################################################
+- stage: Push
+  displayName: "Push to Azure Container Registry"
+  dependsOn: Build
+  jobs:
+  - job: PushImage
+    steps:
+    - task: AzureCLI@2
+      displayName: "Login and Push to ACR"
+      inputs:
+        azureSubscription: '$(azureSubscription)'
+        scriptType: 'ps'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          Write-Host "Logging into ACR..."
+          az acr login --name $(acrName)
 
-      Write-Host "Building Docker image..."
-      docker build -t $(acrLoginServer)/$(imageRepository):$(imageTag) .
+          Write-Host "Tagging image..."
+          docker tag $(imageRepository):$(imageTag) `
+            $(acrLoginServer)/$(imageRepository):$(imageTag)
 
-      Write-Host "Pushing Docker image..."
-      docker push $(acrLoginServer)/$(imageRepository):$(imageTag)
+          Write-Host "Pushing image..."
+          docker push $(acrLoginServer)/$(imageRepository):$(imageTag)
 
-# 3️⃣ Create or Update Container App
-- task: AzureCLI@2
-  displayName: 'Deploy to Azure Container Apps'
-  inputs:
-    azureSubscription: '$(azureSubscription)'
-    scriptType: 'ps'
-    scriptLocation: 'inlineScript'
-    inlineScript: |
-
-      $appExists = az containerapp show `
-        --name $(containerAppName) `
-        --resource-group $(resourceGroup) `
-        --query name `
-        --output tsv 2>$null
-
-      if (-not $appExists) {
-
-          Write-Host "Creating Container App..."
-
-          az containerapp create `
-            --name $(containerAppName) `
-            --resource-group $(resourceGroup) `
-            --environment $(containerAppEnv) `
-            --image $(acrLoginServer)/$(imageRepository):$(imageTag) `
-            --registry-server $(acrLoginServer) `
-            --target-port 80 `
-            --ingress external `
-            --cpu 0.5 `
-            --memory 1.0Gi `
-            --min-replicas 1 `
-            --max-replicas 2
-
-      } else {
-
-          Write-Host "Updating Container App..."
+############################################################
+# STAGE 3 - DEPLOY TO CONTAINER APPS
+############################################################
+- stage: Deploy_ContainerApps
+  displayName: "Deploy to Azure Container Apps"
+  dependsOn: Push
+  jobs:
+  - job: DeployCA
+    steps:
+    - task: AzureCLI@2
+      displayName: "Update Container App"
+      inputs:
+        azureSubscription: '$(azureSubscription)'
+        scriptType: 'ps'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
 
           az containerapp update `
             --name $(containerAppName) `
             --resource-group $(resourceGroup) `
             --image $(acrLoginServer)/$(imageRepository):$(imageTag)
-      }
 
-      Write-Host "Fetching Application URL..."
+############################################################
+# STAGE 4 - DEPLOY TO APP SERVICE
+############################################################
+- stage: Deploy_AppService
+  displayName: "Deploy to Azure App Service"
+  dependsOn: Push
+  jobs:
+  - job: DeployWebApp
+    steps:
+    - task: AzureCLI@2
+      displayName: "Configure Web App Container"
+      inputs:
+        azureSubscription: '$(azureSubscription)'
+        scriptType: 'ps'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
 
-      az containerapp show `
-        --name $(containerAppName) `
-        --resource-group $(resourceGroup) `
-        --query properties.configuration.ingress.fqdn
+          Write-Host "Configuring App Service to use new image..."
+
+          az webapp config container set `
+            --name $(appServiceName) `
+            --resource-group $(resourceGroup) `
+            --docker-custom-image-name $(acrLoginServer)/$(imageRepository):$(imageTag) `
+            --docker-registry-server-url https://$(acrLoginServer)
+
+          Write-Host "Restarting App Service..."
+          az webapp restart `
+            --name $(appServiceName) `
+            --resource-group $(resourceGroup)
